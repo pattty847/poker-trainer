@@ -1,0 +1,48 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+venv/
+env/
+
+# Node/Frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+*.log
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment variables
+.env
+.env.local
+
+# Agents
+AGENTS.md
+CLAUDE.md
+
+# Plans
+.cursor/plans/
+
+# Scripts
+scripts/
+
+# SQLite
