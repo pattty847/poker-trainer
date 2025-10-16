@@ -99,10 +99,16 @@ class PokerAdapter:
         self.pot = self.sb + self.bb
         self.history.append({"actor": "hero", "move": "post_sb", "size": self.sb, "street": "preflop"})
         self.history.append({"actor": "villain", "move": "post_bb", "size": self.bb, "street": "preflop"})
-        # Deal hole cards (hero first for determinism)
-        self.hero.cards = self._draw(2)
-        self.villain.cards = self._draw(2)
-        # Initialize per-round contributions and current bet
+        # Reset folds and deal hole cards in BTN order
+        for p in self.players:
+            p.folded = False
+            p.cards = []
+            p.contributed = 0.0
+            p.current_bet = 0.0
+        order = [(self.btn_seat + i) % self.num_players for i in range(self.num_players)]
+        for seat in order:
+            self.players[seat].cards = self._draw(2)
+        # Initialize per-round contributions and current bet (SB/BB)
         self.hero.contributed = self.sb
         self.villain.contributed = self.bb
         self.hero.current_bet = self.sb
@@ -371,11 +377,42 @@ class PokerAdapter:
         return True
 
     def calculate_side_pots(self) -> List[Dict]:
-        """Return side pots scaffolding.
+        """Compute side pots from contributions.
 
-        Future: compute from contributions; for now single main pot only.
+        Returns a list of pots in order, where each pot is a dict with keys:
+        {"amount": float, "eligible_players": List[int]}
+
+        This method assumes `contributed` represents each player's total
+        contribution this hand (not lifetime), and folded players are ineligible.
+        All-in players remain eligible for pots up to their contributed tier.
         """
-        return [{"amount": round(self.pot, 2), "eligible_players": self.active_players()}]
+        # Gather eligible players with positive contributions
+        contrib = {p.seat: p.contributed for p in self.players if not p.folded and p.contributed > 0}
+        if not contrib:
+            return []
+        # Unique sorted tiers of contributions
+        tiers = sorted(set(contrib.values()))
+        pots: List[Dict] = []
+        prev = 0.0
+        for t in tiers:
+            delta = t - prev
+            if delta <= 0:
+                prev = t
+                continue
+            # Players eligible are those with contribution >= t
+            eligible = [seat for seat, c in contrib.items() if c >= t]
+            if eligible:
+                amount = delta * len(eligible)
+                pots.append({"amount": round(amount, 2), "eligible_players": eligible})
+            prev = t
+        # If total computed differs from pot (due to call/rounding), add remainder as last pot
+        total_calc = round(sum(p["amount"] for p in pots), 2)
+        remainder = round(self.pot - total_calc, 2)
+        if remainder > 0 and pots:
+            # Everyone who has any contribution is eligible for the remainder
+            eligible_any = [seat for seat in contrib.keys()]
+            pots.append({"amount": remainder, "eligible_players": eligible_any})
+        return pots
 
     @staticmethod
     def _is_all_in(p: PlayerState) -> bool:
@@ -483,33 +520,65 @@ class PokerAdapter:
 
     # --- Showdown evaluation ---
     def _evaluate_showdown(self) -> None:
-        """Compare 7-card hands, award pot, and append a result to history."""
-        hero_best = self._best_five_from_seven(self.hero.cards + self.board)
-        villain_best = self._best_five_from_seven(self.villain.cards + self.board)
-        winner = "split"
-        if hero_best[0] > villain_best[0]:
-            winner = "hero"
-        elif hero_best[0] < villain_best[0]:
-            winner = "villain"
-        else:
-            # Same category: compare kickers tuple
-            if hero_best[1] > villain_best[1]:
-                winner = "hero"
-            elif hero_best[1] < villain_best[1]:
-                winner = "villain"
+        """Compute multiway showdown with side pots and distribute chips.
+
+        Back-compat: hero/villain fields are populated as before. Additional
+        per-pot results are included in the result history event under `pots`.
+        """
+        # Build hand ranks for all non-folded players
+        alive = [p for p in self.players if not p.folded]
+        hand_ranks: Dict[int, Tuple[int, Tuple[int, ...]]] = {}
+        for p in alive:
+            best = self._best_five_from_seven(p.cards + self.board)
+            # Only rank and kickers used for comparison
+            hand_ranks[p.seat] = (best[0], tuple(best[1]))
+
+        # Compute side pots
+        pots = self.calculate_side_pots()
+        distributions: List[Dict] = []
+        remaining_pot = self.pot
+        for pot in pots:
+            amount = pot["amount"]
+            elig = pot["eligible_players"]
+            # Determine winner(s) among eligible seats
+            best_key = None
+            winners: List[int] = []
+            for seat in elig:
+                key = hand_ranks.get(seat)
+                if key is None:
+                    continue
+                if best_key is None or key > best_key:
+                    best_key = key
+                    winners = [seat]
+                elif key == best_key:
+                    winners.append(seat)
+            if winners:
+                share = round(amount / len(winners), 2)
+                for seat in winners:
+                    self.players[seat].stack += share
+                distributions.append({"amount": amount, "winners": winners, "share": share})
+                remaining_pot = round(remaining_pot - amount, 2)
+        # Any rounding remainder goes to best overall among alive
+        if remaining_pot > 0 and alive:
+            best_overall = max((hand_ranks[p.seat], p.seat) for p in alive)[1]
+            self.players[best_overall].stack += remaining_pot
+            distributions.append({"amount": remaining_pot, "winners": [best_overall], "share": remaining_pot})
+            remaining_pot = 0.0
 
         pot_before = self.pot
-        if winner == "hero":
-            self.hero.stack += self.pot
-            self.pot = 0.0
-        elif winner == "villain":
-            self.villain.stack += self.pot
-            self.pot = 0.0
-        else:
-            # split pot heads-up
-            self.hero.stack += self.pot / 2.0
-            self.villain.stack += self.pot / 2.0
-            self.pot = 0.0
+        self.pot = 0.0
+
+        # Back-compat summary winner for HU only
+        winner = "split"
+        hero_best = self._best_five_from_seven(self.hero.cards + self.board)
+        villain_best = self._best_five_from_seven(self.villain.cards + self.board)
+        if len(alive) == 2:
+            if hand_ranks.get(self.hero.seat, (0, ())) > hand_ranks.get(self.villain.seat, (0, ())):
+                winner = "hero"
+            elif hand_ranks.get(self.hero.seat, (0, ())) < hand_ranks.get(self.villain.seat, (0, ())):
+                winner = "villain"
+            else:
+                winner = "split"
 
         self.history.append({
             "actor": "result",
@@ -518,6 +587,7 @@ class PokerAdapter:
             "heroBest": self._hand_desc(hero_best),
             "villainBest": self._hand_desc(villain_best),
             "pot": round(pot_before, 2),
+            "pots": distributions,
         })
 
     # Hand evaluation helpers
