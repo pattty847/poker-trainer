@@ -10,9 +10,9 @@ class GameManager:
     def __init__(self) -> None:
         self.sessions: Dict[str, PokerAdapter] = {}
 
-    def new_game(self, *, small_blind: float, big_blind: float, stack: float, seed: int) -> Dict:
+    def new_game(self, *, small_blind: float, big_blind: float, stack: float, seed: int, num_players: int = 2) -> Dict:
         session_id = str(uuid.uuid4())
-        adapter = PokerAdapter(small_blind=small_blind, big_blind=big_blind, stack=stack, seed=seed)
+        adapter = PokerAdapter(small_blind=small_blind, big_blind=big_blind, stack=stack, seed=seed, num_players=num_players)
         self.sessions[session_id] = adapter
         return {"sessionId": session_id, "state": adapter.get_state(session_id)}
 
@@ -29,7 +29,12 @@ class GameManager:
             return {"error": "SESSION_NOT_FOUND"}
         return {"state": adapter.get_state(session_id)}
 
+    def reset_game(self, session_id: str, seed: Optional[int] = None) -> Dict:
+        adapter = self.sessions.get(session_id)
+        if not adapter:
+            return {"error": "SESSION_NOT_FOUND"}
+        adapter.reset_hand(seed=seed)
+        return {"state": adapter.get_state(session_id)}
+
 
 game_manager = GameManager()
-
-

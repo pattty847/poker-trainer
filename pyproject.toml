@@ -10,4 +10,5 @@ dependencies = [
     "sse-starlette>=2.1.0",
     "pydantic>=2.8.0",
     "pokerkit>=0.5.0",
+    "pytest>=7.4.0",
 ]

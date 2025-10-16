@@ -4,8 +4,6 @@ from uuid import uuid4
 from fastapi import APIRouter, Request
 from sse_starlette.sse import EventSourceResponse
 
-from ..core.sse import sse_event_stream
-
 
 router = APIRouter()
 
@@ -25,7 +23,7 @@ async def coach_ask(payload: dict, request: Request):
         yield {"id": "z", "data": json.dumps({"type": "end", "content": ""})}
 
     if request.headers.get("accept", "").startswith("text/event-stream"):
-        return EventSourceResponse(sse_event_stream(gen()))
+        return EventSourceResponse(gen())
 
     # Non-SSE simple response
     return {"suggestion": "Consider position and pot odds."}

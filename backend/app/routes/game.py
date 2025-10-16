@@ -16,6 +16,7 @@ def new_game(payload: Dict):
         big_blind=float(payload.get("bigBlind", 1.0)),
         stack=float(payload.get("stack", 100)),
         seed=int(payload.get("seed", 42)),
+        num_players=int(payload.get("numPlayers", 2)),
     )
 
 
@@ -32,4 +33,8 @@ def apply_action(payload: Dict):
 def get_state(sessionId: str):
     return game_manager.get_state(sessionId)
 
+
+@router.post("/api/game/reset")
+def reset_game(payload: Dict):
+    return game_manager.reset_game(session_id=payload["sessionId"], seed=payload.get("seed"))
 

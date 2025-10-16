@@ -4,8 +4,6 @@ from uuid import uuid4
 from fastapi import APIRouter, Request
 from sse_starlette.sse import EventSourceResponse
 
-from ..core.sse import sse_event_stream
-
 
 router = APIRouter()
 
@@ -30,6 +28,6 @@ async def reason_stream(sessionId: str, archetype: str, request: Request):
             yield evt
         # Note: in real impl we'd push periodic heartbeats while stream is open
 
-    return EventSourceResponse(sse_event_stream(with_heartbeat()))
+    return EventSourceResponse(with_heartbeat())
 
 
