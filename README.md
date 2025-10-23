@@ -127,6 +127,10 @@ Frontend will run at http://localhost:5173
 - [x] SSE streaming infrastructure
 - [x] Basic game state management
 - [x] Heads-up poker support
+- [x] Multi-player backend architecture (2-9 players)
+- [x] Button rotation and position tracking
+- [x] Side pot calculation
+- [x] Multiway showdown distribution
 - [ ] Deterministic heuristics (preflop/postflop)
 - [ ] PokerKit integration
 - [ ] Skill-level tagging and filtering
@@ -138,11 +142,12 @@ Frontend will run at http://localhost:5173
 - [ ] Range estimation with ML model
 - [ ] Session persistence
 - [ ] Multi-street reasoning continuity
+- [ ] Multi-player UI (seats 2+)
+- [ ] Full multiway betting round engine
 
 ### Phase 3: Advanced
 - [ ] Fine-tuned local LLM (QLoRA)
 - [ ] Advanced range estimation (MLP)
-- [ ] Multi-way pots support
 - [ ] Tournament mode
 
 ## Design Principles
